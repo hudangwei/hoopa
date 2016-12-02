@@ -1,10 +1,12 @@
-# 自动生成springboot+spring-data-jpa+mysql代码
+# springboot+jpa代码自动生成工具,集成swagger2
 
 
 ## 命令示例:
 ```
 ./hoopa.exe -gen test -tables="user" -conn=root:123456@tcp\(127.0.0.1:3306\)/test_db -driver=mysql -group=com.example.user
 ```
+支持多表,中间用逗号分割
+
 ## 生成的目录结构
 ```
 ├── test
