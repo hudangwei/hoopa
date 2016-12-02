@@ -194,6 +194,9 @@ func generateAppcode(driver, connStr, tables, currpath, group string) {
 			selectedTables[v] = true
 		}
 	}
+	if driver == "" {
+		driver = "mysql"
+	}
 	switch driver {
 	case "mysql":
 	default:
@@ -212,9 +215,13 @@ func gen(dbms, connStr string, selectedTableNames map[string]bool, apppath, grou
 	defer db.Close()
 	if trans, ok := dbDriver[dbms]; ok {
 		fmt.Printf("[INFO] Analyzing database tables...\n")
-		tableNames := strings.Split(tablesStr, ",")
-		//tableNames := trans.GetTableNames(db)
-		//fmt.Println(tableNames)
+		var tableNames []string
+		if tablesStr != "" {
+			tableNames = strings.Split(tablesStr, ",")
+		} else {
+			tableNames = trans.GetTableNames(db)
+		}
+
 		tables := getTableObjects(tableNames, db, trans)
 		mvcPath := new(MvcPath)
 		mvcPath.ControllerPath = path.Join(apppath, "controller")
