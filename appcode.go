@@ -134,7 +134,7 @@ func (tb *Table) GetModelStruct() string {
 
 //组装dao
 func (tb *Table) GetDaoStruct() string {
-	rv := fmt.Sprintf("public interface %sDao extends JpaRepository<%s, %s> {\n", BigCamelCase(tb.Name), BigCamelCase(tb.Name), tb.PkType)
+	rv := fmt.Sprintf("public interface %sDao extends JpaRepository<%s, %s>,JpaSpecificationExecutor<%s> {\n", BigCamelCase(tb.Name), BigCamelCase(tb.Name), tb.PkType, BigCamelCase(tb.Name))
 	rv += "}\n"
 	return rv
 }
@@ -705,7 +705,7 @@ import lombok.Data;
 	DaoTPL = `package {{groupPath}}.dao;
 
 import org.springframework.data.jpa.repository.JpaRepository;
-
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import {{groupPath}}.model.*;
 
 {{daoStruct}}
@@ -724,8 +724,20 @@ import {{groupPath}}.dao.*;
 import {{groupPath}}.exception.*;
 import {{groupPath}}.model.*;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Sort.Direction;
+import org.springframework.data.domain.Sort.Order;
+import org.springframework.data.jpa.domain.Specification;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import javax.persistence.criteria.*;
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 public class {{BigModelName}}Service {
@@ -768,6 +780,47 @@ public class {{BigModelName}}Service {
     public {{BigModelName}} get{{BigModelName}}By{{BigPkName}}({{PkTypeName}} id) {
         return {{LittleModelName}}Dao.findOne(id);
     }
+
+	public Page<{{BigModelName}}> getAll{{BigModelName}}(String query, /*String fields, */String sortby,Integer page, Integer pageSize) {
+        if (page == null) {
+            page = 0;
+        }
+        if (pageSize == null) {
+            pageSize = 10;
+        }
+
+        PageRequest pageRequest;
+        if (sortby != null && sortby.length() > 0) {
+            List<Order> orders = new ArrayList<Order>();
+            String[] sortFields = sortby.split(",");
+            for (String sortField : sortFields) {
+                String[] orderbys = sortField.split(":");
+                if(orderbys[1].equals("desc")) {
+                    orders.add(new Order(Sort.Direction.DESC,orderbys[0]));
+                } else if (orderbys[1].equals("asc")) {
+                    orders.add(new Order(Sort.Direction.ASC, orderbys[0]));
+                }
+            }
+            pageRequest = new PageRequest(page, pageSize,new Sort(orders));
+        }else{
+            pageRequest = new PageRequest(page,pageSize);
+        }
+
+        return {{LittleModelName}}Dao.findAll(new Specification<{{BigModelName}}>() {
+            @Override
+            public Predicate toPredicate(Root<{{BigModelName}}> root, CriteriaQuery<?> cq, CriteriaBuilder cb) {
+                List<Predicate> preList = new ArrayList<Predicate>();
+                if (query != null && query.length() > 0) {
+                    String[] queryFields = query.split(",");
+                    for (String queryField : queryFields) {
+                        String[] queryKv = queryField.split(":");
+                        preList.add(cb.equal(root.get(queryKv[0]),queryKv[1]));
+                    }
+                }
+                return cq.where(preList.toArray(new Predicate[preList.size()])).getRestriction();
+            }
+        },pageRequest);
+    }
 }
 `
 
@@ -778,8 +831,11 @@ import {{groupPath}}.model.*;
 import {{groupPath}}.service.{{BigModelName}}Service;
 import io.swagger.annotations.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/{{AllLittleModelName}}")
@@ -811,6 +867,21 @@ public class {{BigModelName}}Controller {
     @RequestMapping(value="/{id}", method=RequestMethod.GET,produces = MediaType.APPLICATION_JSON_VALUE)
     public {{BigModelName}} get{{BigModelName}}(@PathVariable {{PkTypeName}} id) {
         return {{LittleModelName}}Service.get{{BigModelName}}By{{BigPkName}}(id);
+    }
+
+	@ApiOperation(value="getAll{{BigModelName}}", notes="Get All {{BigModelName}} info")
+    @ApiImplicitParams({ @ApiImplicitParam(paramType = "query",name = "query",required = false, value = "Filter. e.g. col1:v1,col2:v2 ...",dataType = "String"),
+            /*@ApiImplicitParam(paramType = "query",name = "fields",required = false,value = "Fields returned. e.g. col1,col2 ...",dataType = "String"),*/
+            @ApiImplicitParam(paramType = "query",name = "sortby",required = false,value = "Order corresponding to each sortby field. e.g. col1:desc,col2:asc ...",dataType = "String"),
+            @ApiImplicitParam(paramType = "query",name = "page",required = false,value = "Limit the size of result set. Must be an integer",dataType = "Int"),
+            @ApiImplicitParam(paramType = "query",name = "pagesize",required = false,value = "Start position of result set. Must be an integer",dataType = "Int")})
+    @RequestMapping(value="", method=RequestMethod.GET,produces = MediaType.APPLICATION_JSON_VALUE)
+    public Page<{{BigModelName}}> getAll{{BigModelName}}(@RequestParam(value = "query",required = false) String query,
+                                 /*@RequestParam(value = "fields",required = false) String fields,*/
+                                 @RequestParam(value = "sortby",required = false) String sortby,
+                                 @RequestParam(value = "page",required = false) Integer page,
+                                 @RequestParam(value = "pagesize",required = false) Integer pagesize) {
+        return {{LittleModelName}}Service.getAll{{BigModelName}}(query,/*fields,*/sortby,page,pagesize);
     }
 }
 `
