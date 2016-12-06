@@ -137,8 +137,27 @@ func BigCamelCase(in string) string {
 	return strings.Join(tokens, "")
 }
 
-// 小驼峰 如:very_important_person => veryImportantPerson
+// 首字母大写
+func TitleCamelCase(in string) string {
+	tokens := strings.Split(in, "_")
+	for i := range tokens {
+		tokens[i] = strings.ToLower(strings.Trim(tokens[i], " "))
+	}
+	tokens[0] = strings.Title(tokens[0])
+	return strings.Join(tokens, "")
+}
+
+// 全小写,lombok与swagger有冲突,解决bug问题
 func LittleCamelCase(in string) string {
+	tokens := strings.Split(in, "_")
+	for i := range tokens {
+		tokens[i] = strings.ToLower(strings.Trim(tokens[i], " "))
+	}
+	return strings.Join(tokens, "")
+}
+
+// 小驼峰 如:very_important_person => veryImportantPerson
+func LittleCamelCase_bak(in string) string {
 	tokens := strings.Split(in, "_")
 	for i := range tokens {
 		tokens[i] = strings.Title(strings.Trim(tokens[i], " "))

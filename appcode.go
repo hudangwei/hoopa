@@ -484,7 +484,7 @@ func writeControllerFiles(tables []*Table, mPath string, selectedTables map[stri
 		fileStr = strings.Replace(fileStr, "{{BigModelName}}", BigCamelCase(tb.Name), -1)
 		fileStr = strings.Replace(fileStr, "{{LittleModelName}}", LittleCamelCase(tb.Name), -1)
 		fileStr = strings.Replace(fileStr, "{{AllLittleModelName}}", strings.ToLower(LittleCamelCase(tb.Name)), -1)
-		fileStr = strings.Replace(fileStr, "{{BigPkName}}", BigCamelCase(tb.Pk), -1)
+		fileStr = strings.Replace(fileStr, "{{BigPkName}}", TitleCamelCase(tb.Pk), -1)
 		fileStr = strings.Replace(fileStr, "{{PkTypeName}}", tb.PkType, -1)
 
 		if _, err := f.WriteString(fileStr); err != nil {
@@ -533,7 +533,7 @@ func writeServiceFiles(tables []*Table, mPath string, selectedTables map[string]
 		fileStr := strings.Replace(template, "{{groupPath}}", group, -1)
 		fileStr = strings.Replace(fileStr, "{{BigModelName}}", BigCamelCase(tb.Name), -1)
 		fileStr = strings.Replace(fileStr, "{{LittleModelName}}", LittleCamelCase(tb.Name), -1)
-		fileStr = strings.Replace(fileStr, "{{BigPkName}}", BigCamelCase(tb.Pk), -1)
+		fileStr = strings.Replace(fileStr, "{{BigPkName}}", TitleCamelCase(tb.Pk), -1)
 		fileStr = strings.Replace(fileStr, "{{PkTypeName}}", tb.PkType, -1)
 
 		if _, err := f.WriteString(fileStr); err != nil {
