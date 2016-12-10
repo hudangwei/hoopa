@@ -25,11 +25,14 @@ var dbDriver = map[string]DbTransformer{
 }
 
 type MvcPath struct {
+	ConfigPath     string
 	ControllerPath string
-	ServicePath    string
 	DaoPath        string
-	ModelPath      string
+	DtoPath        string
+	EnumsPath      string
 	ExceptionPath  string
+	ModelPath      string
+	ServicePath    string
 }
 
 // sql数据类型与java数据类型映射表
@@ -224,11 +227,14 @@ func gen(dbms, connStr string, selectedTableNames map[string]bool, apppath, grou
 
 		tables := getTableObjects(tableNames, db, trans)
 		mvcPath := new(MvcPath)
+		mvcPath.ConfigPath = path.Join(apppath, "config")
 		mvcPath.ControllerPath = path.Join(apppath, "controller")
-		mvcPath.ServicePath = path.Join(apppath, "service")
 		mvcPath.DaoPath = path.Join(apppath, "dao")
-		mvcPath.ModelPath = path.Join(apppath, "model")
+		mvcPath.DtoPath = path.Join(apppath, "dto")
+		mvcPath.EnumsPath = path.Join(apppath, "enums")
 		mvcPath.ExceptionPath = path.Join(apppath, "exception")
+		mvcPath.ModelPath = path.Join(apppath, "model")
+		mvcPath.ServicePath = path.Join(apppath, "service")
 		createPaths(mvcPath)
 		writeSourceFiles(group, tables, mvcPath, selectedTableNames)
 	} else {
@@ -430,19 +436,63 @@ func (*MysqlDB) GetJavaDataType(sqlType string) (javaType string) {
 
 // 创建mvc层次目录
 func createPaths(paths *MvcPath) {
+	os.Mkdir(paths.ConfigPath, 0777)
 	os.Mkdir(paths.ControllerPath, 0777)
-	os.Mkdir(paths.ServicePath, 0777)
 	os.Mkdir(paths.DaoPath, 0777)
-	os.Mkdir(paths.ModelPath, 0777)
+	os.Mkdir(paths.DtoPath, 0777)
+	os.Mkdir(paths.EnumsPath, 0777)
 	os.Mkdir(paths.ExceptionPath, 0777)
+	os.Mkdir(paths.ModelPath, 0777)
+	os.Mkdir(paths.ServicePath, 0777)
+
 }
 
 func writeSourceFiles(group string, tables []*Table, paths *MvcPath, selectedTables map[string]bool) {
+	writeConfigFiles(paths.ConfigPath, group)
 	writeControllerFiles(tables, paths.ControllerPath, selectedTables, group)
-	writeServiceFiles(tables, paths.ServicePath, selectedTables, group)
 	writeDaoFiles(tables, paths.DaoPath, selectedTables, group)
+	writeDtoFiles(paths.DtoPath, group)
+	writeEnumsFiles(tables, paths.EnumsPath, selectedTables, group)
+	writeExceptionFiles1(paths.ExceptionPath, group)
+	writeExceptionFiles2(paths.ExceptionPath, group)
 	writeModelFiles(tables, paths.ModelPath, selectedTables, group)
-	writeExceptionFiles(tables, paths.ExceptionPath, selectedTables, group)
+	writeServiceFiles(tables, paths.ServicePath, selectedTables, group)
+}
+
+// 根据ConfigTPL生成config文件
+func writeConfigFiles(mPath string, group string) {
+	fpath := path.Join(mPath, "Swagger2Config.java")
+	var f *os.File
+	var err error
+	if isExist(fpath) {
+		fmt.Printf("[WARN] '%v' already exists. Do you want to overwrite it? [Yes|No] ", fpath)
+		if askForConfirmation() {
+			f, err = os.OpenFile(fpath, os.O_RDWR|os.O_TRUNC, 0666)
+			if err != nil {
+				fmt.Printf("[WARN] %v\n", err)
+				return
+			}
+		} else {
+			fmt.Printf("[WARN] Skipped create file '%s'\n", fpath)
+			return
+		}
+	} else {
+		f, err = os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0666)
+		if err != nil {
+			fmt.Printf("[WARN] %v\n", err)
+			return
+		}
+	}
+
+	template := ""
+	template = ConfigTPL
+	fileStr := strings.Replace(template, "{{groupPath}}", group, -1)
+
+	if _, err := f.WriteString(fileStr); err != nil {
+		fmt.Printf("[ERRO] Could not write config file to %s\n", fpath)
+		os.Exit(2)
+	}
+	CloseFile(f)
 }
 
 // 根据ControllerTPL生成controller文件
@@ -495,55 +545,6 @@ func writeControllerFiles(tables []*Table, mPath string, selectedTables map[stri
 	}
 }
 
-// 根据ServiceTPL生成Service文件
-func writeServiceFiles(tables []*Table, mPath string, selectedTables map[string]bool, group string) {
-	for _, tb := range tables {
-		// if selectedTables map is not nil and this table is not selected, ignore it
-		if selectedTables != nil {
-			if _, selected := selectedTables[tb.Name]; !selected {
-				continue
-			}
-		}
-		filename := BigCamelCase(tb.Name)
-		fpath := path.Join(mPath, filename+"Service.java")
-		var f *os.File
-		var err error
-		if isExist(fpath) {
-			fmt.Printf("[WARN] '%v' already exists. Do you want to overwrite it? [Yes|No] ", fpath)
-			if askForConfirmation() {
-				f, err = os.OpenFile(fpath, os.O_RDWR|os.O_TRUNC, 0666)
-				if err != nil {
-					fmt.Printf("[WARN] %v\n", err)
-					continue
-				}
-			} else {
-				fmt.Printf("[WARN] Skipped create file '%s'\n", fpath)
-				continue
-			}
-		} else {
-			f, err = os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0666)
-			if err != nil {
-				fmt.Printf("[WARN] %v\n", err)
-				continue
-			}
-		}
-
-		template := ""
-		template = ServiceTPL
-		fileStr := strings.Replace(template, "{{groupPath}}", group, -1)
-		fileStr = strings.Replace(fileStr, "{{BigModelName}}", BigCamelCase(tb.Name), -1)
-		fileStr = strings.Replace(fileStr, "{{LittleModelName}}", LittleCamelCase(tb.Name), -1)
-		fileStr = strings.Replace(fileStr, "{{BigPkName}}", TitleCamelCase(tb.Pk), -1)
-		fileStr = strings.Replace(fileStr, "{{PkTypeName}}", tb.PkType, -1)
-
-		if _, err := f.WriteString(fileStr); err != nil {
-			fmt.Printf("[ERRO] Could not write service file to %s\n", fpath)
-			os.Exit(2)
-		}
-		CloseFile(f)
-	}
-}
-
 // 根据DaoTPL生成Dao文件
 func writeDaoFiles(tables []*Table, mPath string, selectedTables map[string]bool, group string) {
 	for _, tb := range tables {
@@ -589,49 +590,163 @@ func writeDaoFiles(tables []*Table, mPath string, selectedTables map[string]bool
 	}
 }
 
-// 根据ExceptionTPL生成exception文件
-func writeExceptionFiles(tables []*Table, mPath string, selectedTables map[string]bool, group string) {
-	for _, tb := range tables {
-		// if selectedTables map is not nil and this table is not selected, ignore it
+// 根据DtoTPL生成Dto文件
+func writeDtoFiles(mPath string, group string) {
+	fpath := path.Join(mPath, "Result.java")
+	var f *os.File
+	var err error
+	if isExist(fpath) {
+		fmt.Printf("[WARN] '%v' already exists. Do you want to overwrite it? [Yes|No] ", fpath)
+		if askForConfirmation() {
+			f, err = os.OpenFile(fpath, os.O_RDWR|os.O_TRUNC, 0666)
+			if err != nil {
+				fmt.Printf("[WARN] %v\n", err)
+				return
+			}
+		} else {
+			fmt.Printf("[WARN] Skipped create file '%s'\n", fpath)
+			return
+		}
+	} else {
+		f, err = os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0666)
+		if err != nil {
+			fmt.Printf("[WARN] %v\n", err)
+			return
+		}
+	}
+
+	template := ""
+	template = DtoTPL
+	fileStr := strings.Replace(template, "{{groupPath}}", group, -1)
+
+	if _, err := f.WriteString(fileStr); err != nil {
+		fmt.Printf("[ERRO] Could not write dto file to %s\n", fpath)
+		os.Exit(2)
+	}
+	CloseFile(f)
+}
+
+func getEnumsStruct(tables []*Table, selectedTables map[string]bool) string {
+	rv := "OK(200,\"ok\"),\n"
+	for index, tb := range tables {
 		if selectedTables != nil {
 			if _, selected := selectedTables[tb.Name]; !selected {
 				continue
 			}
 		}
-		filename := BigCamelCase(tb.Name)
-		fpath := path.Join(mPath, filename+"NotFound.java")
-		var f *os.File
-		var err error
-		if isExist(fpath) {
-			fmt.Printf("[WARN] '%v' already exists. Do you want to overwrite it? [Yes|No] ", fpath)
-			if askForConfirmation() {
-				f, err = os.OpenFile(fpath, os.O_RDWR|os.O_TRUNC, 0666)
-				if err != nil {
-					fmt.Printf("[WARN] %v\n", err)
-					continue
-				}
-			} else {
-				fmt.Printf("[WARN] Skipped create file '%s'\n", fpath)
-				continue
-			}
-		} else {
-			f, err = os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0666)
+		rv += fmt.Sprintf("    %s_NOTFOUND(%d,\"%s not found\"),\n", strings.ToUpper(tb.Name), 1000+index, strings.ToLower(tb.Name))
+	}
+	rv += "    SYSTEM_ERROR(500,\"system error\");"
+	return rv
+}
+
+// 根据EnumsTPL生成enums文件
+func writeEnumsFiles(tables []*Table, mPath string, selectedTables map[string]bool, group string) {
+	fpath := path.Join(mPath, "ErrorCodeEnum.java")
+	var f *os.File
+	var err error
+	if isExist(fpath) {
+		fmt.Printf("[WARN] '%v' already exists. Do you want to overwrite it? [Yes|No] ", fpath)
+		if askForConfirmation() {
+			f, err = os.OpenFile(fpath, os.O_RDWR|os.O_TRUNC, 0666)
 			if err != nil {
 				fmt.Printf("[WARN] %v\n", err)
-				continue
+				return
 			}
+		} else {
+			fmt.Printf("[WARN] Skipped create file '%s'\n", fpath)
+			return
 		}
-		template := ""
-		template = ExceptionTPL
-
-		fileStr := strings.Replace(template, "{{groupPath}}", group, -1)
-		fileStr = strings.Replace(fileStr, "{{modelName}}", BigCamelCase(tb.Name), -1)
-		if _, err := f.WriteString(fileStr); err != nil {
-			fmt.Printf("[ERRO] Could not write exception file to %s\n", fpath)
-			os.Exit(2)
+	} else {
+		f, err = os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0666)
+		if err != nil {
+			fmt.Printf("[WARN] %v\n", err)
+			return
 		}
-		CloseFile(f)
 	}
+
+	template := ""
+	template = EnumsTPL
+	fileStr := strings.Replace(template, "{{groupPath}}", group, -1)
+	fileStr = strings.Replace(fileStr, "{{enumsStruct}}", getEnumsStruct(tables, selectedTables), 1)
+
+	if _, err := f.WriteString(fileStr); err != nil {
+		fmt.Printf("[ERRO] Could not write enums file to %s\n", fpath)
+		os.Exit(2)
+	}
+	CloseFile(f)
+}
+
+// 根据ExceptionTPL生成exception文件
+func writeExceptionFiles1(mPath string, group string) {
+	fpath := path.Join(mPath, "BusinessException.java")
+	var f *os.File
+	var err error
+	if isExist(fpath) {
+		fmt.Printf("[WARN] '%v' already exists. Do you want to overwrite it? [Yes|No] ", fpath)
+		if askForConfirmation() {
+			f, err = os.OpenFile(fpath, os.O_RDWR|os.O_TRUNC, 0666)
+			if err != nil {
+				fmt.Printf("[WARN] %v\n", err)
+				return
+			}
+		} else {
+			fmt.Printf("[WARN] Skipped create file '%s'\n", fpath)
+			return
+		}
+	} else {
+		f, err = os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0666)
+		if err != nil {
+			fmt.Printf("[WARN] %v\n", err)
+			return
+		}
+	}
+
+	template := ""
+	template = ExceptionTPL1
+	fileStr := strings.Replace(template, "{{groupPath}}", group, -1)
+
+	if _, err := f.WriteString(fileStr); err != nil {
+		fmt.Printf("[ERRO] Could not write exception file to %s\n", fpath)
+		os.Exit(2)
+	}
+	CloseFile(f)
+}
+
+// 根据ExceptionTPL生成exception文件
+func writeExceptionFiles2(mPath string, group string) {
+	fpath := path.Join(mPath, "GlobalDefaultExceptionHandler.java")
+	var f *os.File
+	var err error
+	if isExist(fpath) {
+		fmt.Printf("[WARN] '%v' already exists. Do you want to overwrite it? [Yes|No] ", fpath)
+		if askForConfirmation() {
+			f, err = os.OpenFile(fpath, os.O_RDWR|os.O_TRUNC, 0666)
+			if err != nil {
+				fmt.Printf("[WARN] %v\n", err)
+				return
+			}
+		} else {
+			fmt.Printf("[WARN] Skipped create file '%s'\n", fpath)
+			return
+		}
+	} else {
+		f, err = os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0666)
+		if err != nil {
+			fmt.Printf("[WARN] %v\n", err)
+			return
+		}
+	}
+
+	template := ""
+	template = ExceptionTPL2
+	fileStr := strings.Replace(template, "{{groupPath}}", group, -1)
+
+	if _, err := f.WriteString(fileStr); err != nil {
+		fmt.Printf("[ERRO] Could not write exception file to %s\n", fpath)
+		os.Exit(2)
+	}
+	CloseFile(f)
 }
 
 // 根据ModelTPL生成model文件
@@ -687,202 +802,52 @@ func writeModelFiles(tables []*Table, mPath string, selectedTables map[string]bo
 	}
 }
 
-const (
-	ModelTPL = `package {{groupPath}}.model;
+// 根据ServiceTPL生成Service文件
+func writeServiceFiles(tables []*Table, mPath string, selectedTables map[string]bool, group string) {
+	for _, tb := range tables {
+		// if selectedTables map is not nil and this table is not selected, ignore it
+		if selectedTables != nil {
+			if _, selected := selectedTables[tb.Name]; !selected {
+				continue
+			}
+		}
+		filename := BigCamelCase(tb.Name)
+		fpath := path.Join(mPath, filename+"Service.java")
+		var f *os.File
+		var err error
+		if isExist(fpath) {
+			fmt.Printf("[WARN] '%v' already exists. Do you want to overwrite it? [Yes|No] ", fpath)
+			if askForConfirmation() {
+				f, err = os.OpenFile(fpath, os.O_RDWR|os.O_TRUNC, 0666)
+				if err != nil {
+					fmt.Printf("[WARN] %v\n", err)
+					continue
+				}
+			} else {
+				fmt.Printf("[WARN] Skipped create file '%s'\n", fpath)
+				continue
+			}
+		} else {
+			f, err = os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0666)
+			if err != nil {
+				fmt.Printf("[WARN] %v\n", err)
+				continue
+			}
+		}
 
-import javax.persistence.*;
+		template := ""
+		template = ServiceTPL
+		fileStr := strings.Replace(template, "{{groupPath}}", group, -1)
+		fileStr = strings.Replace(fileStr, "{{ALLBigModelName}}", strings.ToUpper(tb.Name), -1)
+		fileStr = strings.Replace(fileStr, "{{BigModelName}}", BigCamelCase(tb.Name), -1)
+		fileStr = strings.Replace(fileStr, "{{LittleModelName}}", LittleCamelCase(tb.Name), -1)
+		fileStr = strings.Replace(fileStr, "{{BigPkName}}", TitleCamelCase(tb.Pk), -1)
+		fileStr = strings.Replace(fileStr, "{{PkTypeName}}", tb.PkType, -1)
 
-{{importTimePkg}}
-import io.swagger.annotations.ApiModelProperty;
-import lombok.Data;
-
-@Entity
-@Table(name="{{tableName}}")
-@Data
-{{modelStruct}}
-`
-
-	DaoTPL = `package {{groupPath}}.dao;
-
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
-import {{groupPath}}.model.*;
-
-{{daoStruct}}
-`
-
-	ExceptionTPL = `package {{groupPath}}.exception;
-
-public class {{modelName}}NotFound extends Exception {
-
+		if _, err := f.WriteString(fileStr); err != nil {
+			fmt.Printf("[ERRO] Could not write service file to %s\n", fpath)
+			os.Exit(2)
+		}
+		CloseFile(f)
+	}
 }
-`
-
-	ServiceTPL = `package {{groupPath}}.service;
-
-import {{groupPath}}.dao.*;
-import {{groupPath}}.exception.*;
-import {{groupPath}}.model.*;
-import org.springframework.beans.factory.annotation.Autowired;
-
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.domain.Sort.Direction;
-import org.springframework.data.domain.Sort.Order;
-import org.springframework.data.jpa.domain.Specification;
-
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import javax.persistence.criteria.*;
-import java.util.ArrayList;
-import java.util.List;
-
-@Service
-public class {{BigModelName}}Service {
-
-    @Autowired
-    private {{BigModelName}}Dao {{LittleModelName}}Dao;
-
-    @Transactional
-    public {{BigModelName}} add{{BigModelName}}({{BigModelName}} {{LittleModelName}}) {
-        return {{LittleModelName}}Dao.save({{LittleModelName}});
-    }
-
-    @Transactional
-    public {{BigModelName}} update{{BigModelName}}({{BigModelName}} {{LittleModelName}}) throws {{BigModelName}}NotFound {
-        {{BigModelName}} {{LittleModelName}}Update = {{LittleModelName}}Dao.findOne({{LittleModelName}}.get{{BigPkName}}());
-        if ({{LittleModelName}}Update==null){
-            throw new {{BigModelName}}NotFound();
-        }
-        /*TODO: need add logic eg:
-        if (user.getName()!=null) {
-            userUpdate.setName(user.getName());
-        }
-        if (user.getAge()!=0) {
-            userUpdate.setAge(user.getAge());
-        }
-        */
-        {{LittleModelName}}Dao.save({{LittleModelName}}Update);
-        return {{LittleModelName}}Update;
-    }
-
-    @Transactional
-    public void delete{{BigModelName}}By{{BigPkName}}({{PkTypeName}} id) throws {{BigModelName}}NotFound {
-        {{BigModelName}} {{LittleModelName}}Delete = {{LittleModelName}}Dao.findOne(id);
-        if ({{LittleModelName}}Delete==null) {
-            throw new {{BigModelName}}NotFound();
-        }
-        {{LittleModelName}}Dao.delete(id);
-    }
-
-    public {{BigModelName}} get{{BigModelName}}By{{BigPkName}}({{PkTypeName}} id) {
-        return {{LittleModelName}}Dao.findOne(id);
-    }
-
-	public Page<{{BigModelName}}> getAll{{BigModelName}}(String query, /*String fields, */String sortby,Integer page, Integer pageSize) {
-        if (page == null) {
-            page = 0;
-        }
-        if (pageSize == null) {
-            pageSize = 10;
-        }
-
-        PageRequest pageRequest;
-        if (sortby != null && sortby.length() > 0) {
-            List<Order> orders = new ArrayList<Order>();
-            String[] sortFields = sortby.split(",");
-            for (String sortField : sortFields) {
-                String[] orderbys = sortField.split(":");
-                if(orderbys[1].equals("desc")) {
-                    orders.add(new Order(Sort.Direction.DESC,orderbys[0]));
-                } else if (orderbys[1].equals("asc")) {
-                    orders.add(new Order(Sort.Direction.ASC, orderbys[0]));
-                }
-            }
-            pageRequest = new PageRequest(page, pageSize,new Sort(orders));
-        }else{
-            pageRequest = new PageRequest(page,pageSize);
-        }
-
-        return {{LittleModelName}}Dao.findAll(new Specification<{{BigModelName}}>() {
-            @Override
-            public Predicate toPredicate(Root<{{BigModelName}}> root, CriteriaQuery<?> cq, CriteriaBuilder cb) {
-                List<Predicate> preList = new ArrayList<Predicate>();
-                if (query != null && query.length() > 0) {
-                    String[] queryFields = query.split(",");
-                    for (String queryField : queryFields) {
-                        String[] queryKv = queryField.split(":");
-                        preList.add(cb.equal(root.get(queryKv[0]),queryKv[1]));
-                    }
-                }
-                return cq.where(preList.toArray(new Predicate[preList.size()])).getRestriction();
-            }
-        },pageRequest);
-    }
-}
-`
-
-	ControllerTPL = `package {{groupPath}}.controller;
-
-import {{groupPath}}.exception.*;
-import {{groupPath}}.model.*;
-import {{groupPath}}.service.{{BigModelName}}Service;
-import io.swagger.annotations.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
-import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-
-@RestController
-@RequestMapping("/{{AllLittleModelName}}")
-@Api(value = "{{BigModelName}}Controller", description = "oprations for {{BigModelName}}")
-public class {{BigModelName}}Controller {
-    @Autowired
-    private {{BigModelName}}Service {{LittleModelName}}Service;
-
-    @ApiOperation(value="add{{BigModelName}}", notes="Create {{BigModelName}}")
-    @RequestMapping(value="", method= RequestMethod.POST,produces = MediaType.APPLICATION_JSON_VALUE)
-    public {{BigModelName}} add{{BigModelName}}(@RequestBody {{BigModelName}} {{LittleModelName}}) {
-        return {{LittleModelName}}Service.add{{BigModelName}}({{LittleModelName}});
-    }
-
-    @ApiOperation(value="update{{BigModelName}}", notes="Update {{BigModelName}}")
-    @RequestMapping(value="", method=RequestMethod.PUT,produces = MediaType.APPLICATION_JSON_VALUE)
-    public {{BigModelName}} update{{BigModelName}}(@RequestBody {{BigModelName}} {{LittleModelName}}) throws {{BigModelName}}NotFound {
-        return {{LittleModelName}}Service.update{{BigModelName}}({{LittleModelName}});
-    }
-
-    @ApiOperation(value="delete{{BigModelName}}By{{BigPkName}}", notes="Delete {{BigModelName}} By {{BigPkName}}")
-    @RequestMapping(value="/{id}", method=RequestMethod.DELETE)
-    public String delete{{BigModelName}}By{{BigPkName}}(@PathVariable {{PkTypeName}} id) throws {{BigModelName}}NotFound{
-        {{LittleModelName}}Service.delete{{BigModelName}}By{{BigPkName}}(id);
-        return "ok";
-    }
-
-    @ApiOperation(value="get{{BigModelName}}", notes="Get {{BigModelName}} Info By {{BigPkName}}")
-    @RequestMapping(value="/{id}", method=RequestMethod.GET,produces = MediaType.APPLICATION_JSON_VALUE)
-    public {{BigModelName}} get{{BigModelName}}(@PathVariable {{PkTypeName}} id) {
-        return {{LittleModelName}}Service.get{{BigModelName}}By{{BigPkName}}(id);
-    }
-
-	@ApiOperation(value="getAll{{BigModelName}}", notes="Get All {{BigModelName}} info")
-    @ApiImplicitParams({ @ApiImplicitParam(paramType = "query",name = "query",required = false, value = "Filter. e.g. col1:v1,col2:v2 ...",dataType = "String"),
-            /*@ApiImplicitParam(paramType = "query",name = "fields",required = false,value = "Fields returned. e.g. col1,col2 ...",dataType = "String"),*/
-            @ApiImplicitParam(paramType = "query",name = "sortby",required = false,value = "Order corresponding to each sortby field. e.g. col1:desc,col2:asc ...",dataType = "String"),
-            @ApiImplicitParam(paramType = "query",name = "page",required = false,value = "Limit the size of result set. Must be an integer",dataType = "Int"),
-            @ApiImplicitParam(paramType = "query",name = "pagesize",required = false,value = "Start position of result set. Must be an integer",dataType = "Int")})
-    @RequestMapping(value="", method=RequestMethod.GET,produces = MediaType.APPLICATION_JSON_VALUE)
-    public Page<{{BigModelName}}> getAll{{BigModelName}}(@RequestParam(value = "query",required = false) String query,
-                                 /*@RequestParam(value = "fields",required = false) String fields,*/
-                                 @RequestParam(value = "sortby",required = false) String sortby,
-                                 @RequestParam(value = "page",required = false) Integer page,
-                                 @RequestParam(value = "pagesize",required = false) Integer pagesize) {
-        return {{LittleModelName}}Service.getAll{{BigModelName}}(query,/*fields,*/sortby,page,pagesize);
-    }
-}
-`
-)
