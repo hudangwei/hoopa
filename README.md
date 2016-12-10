@@ -5,22 +5,43 @@
 ```
 ./hoopa.exe -gen test -tables="user" -conn=root:123456@tcp\(127.0.0.1:3306\)/test_db -driver=mysql -group=com.example.user
 ```
-支持多表,中间用逗号分割
+支持多表,中间用逗号分割,如果tables为空,则遍历整个数据库
 
 ## 生成的目录结构
 ```
 ├── test
-    ├── controller
-	│   └── UserController.java
-	├── dao
-	│   └── UserDao.java
-	├── exception
-	│   └── UserNotFound.java
-	├── model
-	│   └── User.java
-	└── service
-	    └── UserService.java
+	├── pom.xml
+	└── src
+    	├── main
+		│	├── java
+		|   |   └── com.example.user
+		|   |   	├── config
+		|   |   	|   └── Swagger2Config.java
+		|   |   	├── controller
+		|   |   	|   └── UserController.java
+		|   |   	├── dao
+		|   |   	|   └── UserDao.java
+		|   |   	├── dto
+		|   |   	|   └── Result.java
+		|   |   	├── enums
+		|   |   	|   └── ErrorCodeEnum.java
+		|   |   	├── exception
+		|   |   	|   ├── BusinessException.java
+		|   |   	|   └── GlobalDefaultExceptionHandler.java
+		|   |   	├── model
+		|   |   	|   └── User.java
+		|   |   	├── service
+		|   |   	|   └── UserService.java
+		|   |   	└── Application.java
+		│	└── resources
+		│  		├── application.yml
+		│  		├── bootstrap.yml
+		│  		└── log4j2.xml
+		└── test
+		    └── java
+				└── com.example.user
+					└── ApplicationTests.java
 ```
 
 ## TODO
-待添加复杂的查询
+生成springboot完整项目
