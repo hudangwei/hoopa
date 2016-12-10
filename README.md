@@ -13,7 +13,7 @@
 	├── pom.xml
 	└── src
     	├── main
-		│	├── java
+		│   ├── java
 		|   |   └── com.example.user
 		|   |   	├── config
 		|   |   	|   └── Swagger2Config.java
@@ -33,7 +33,7 @@
 		|   |   	├── service
 		|   |   	|   └── UserService.java
 		|   |   	└── Application.java
-		│	└── resources
+		│   └── resources
 		│  		├── application.yml
 		│  		├── bootstrap.yml
 		│  		└── log4j2.xml
