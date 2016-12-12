@@ -25,14 +25,15 @@ var dbDriver = map[string]DbTransformer{
 }
 
 type MvcPath struct {
-	ConfigPath     string
-	ControllerPath string
-	DaoPath        string
-	DtoPath        string
-	EnumsPath      string
-	ExceptionPath  string
-	ModelPath      string
-	ServicePath    string
+	ConfigPath          string
+	ControllerPath      string
+	DaoPath             string
+	DtoPath             string
+	EnumsPath           string
+	ExceptionPath       string
+	ModelPath           string
+	ServicePath         string
+	ApplicationFilePath string
 }
 
 // sql数据类型与java数据类型映射表
@@ -235,6 +236,7 @@ func gen(dbms, connStr string, selectedTableNames map[string]bool, apppath, grou
 		mvcPath.ExceptionPath = path.Join(apppath, "exception")
 		mvcPath.ModelPath = path.Join(apppath, "model")
 		mvcPath.ServicePath = path.Join(apppath, "service")
+		mvcPath.ApplicationFilePath = apppath
 		createPaths(mvcPath)
 		writeSourceFiles(group, tables, mvcPath, selectedTableNames)
 	} else {
@@ -448,6 +450,7 @@ func createPaths(paths *MvcPath) {
 }
 
 func writeSourceFiles(group string, tables []*Table, paths *MvcPath, selectedTables map[string]bool) {
+	writeApplicationFiles(paths.ApplicationFilePath, group)
 	writeConfigFiles(paths.ConfigPath, group)
 	writeControllerFiles(tables, paths.ControllerPath, selectedTables, group)
 	writeDaoFiles(tables, paths.DaoPath, selectedTables, group)
@@ -457,6 +460,42 @@ func writeSourceFiles(group string, tables []*Table, paths *MvcPath, selectedTab
 	writeExceptionFiles2(paths.ExceptionPath, group)
 	writeModelFiles(tables, paths.ModelPath, selectedTables, group)
 	writeServiceFiles(tables, paths.ServicePath, selectedTables, group)
+}
+
+// 根据ApplicationTPL生成application文件
+func writeApplicationFiles(mPath string, group string) {
+	fpath := path.Join(mPath, "Application.java")
+	var f *os.File
+	var err error
+	if isExist(fpath) {
+		fmt.Printf("[WARN] '%v' already exists. Do you want to overwrite it? [Yes|No] ", fpath)
+		if askForConfirmation() {
+			f, err = os.OpenFile(fpath, os.O_RDWR|os.O_TRUNC, 0666)
+			if err != nil {
+				fmt.Printf("[WARN] %v\n", err)
+				return
+			}
+		} else {
+			fmt.Printf("[WARN] Skipped create file '%s'\n", fpath)
+			return
+		}
+	} else {
+		f, err = os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0666)
+		if err != nil {
+			fmt.Printf("[WARN] %v\n", err)
+			return
+		}
+	}
+
+	template := ""
+	template = ApplicationTPL
+	fileStr := strings.Replace(template, "{{groupPath}}", group, -1)
+
+	if _, err := f.WriteString(fileStr); err != nil {
+		fmt.Printf("[ERRO] Could not write application file to %s\n", fpath)
+		os.Exit(2)
+	}
+	CloseFile(f)
 }
 
 // 根据ConfigTPL生成config文件

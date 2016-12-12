@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 )
 
 type docValue string
@@ -38,13 +39,31 @@ func main() {
 	fmt.Printf("current version is %s.\n", version)
 	flag.Parse()
 	currpath, _ := os.Getwd()
-	apppath := path.Join(currpath, string(genFileName))
-
+	projectPath := path.Join(currpath, string(genFileName))
+	groupPathList := strings.Split(string(group), ".")
+	appPath := path.Join(projectPath, "src", "main", "java")
+	testPath := path.Join(projectPath, "src", "test", "java")
+	for _, v := range groupPathList {
+		appPath = path.Join(appPath, v)
+		testPath = path.Join(testPath, v)
+	}
+	resourcesPath := path.Join(projectPath, "src", "main", "resources")
 	fmt.Println("start ...")
-	os.MkdirAll(apppath, 0755)
-	fmt.Printf("mkdir %s\n", apppath)
+	os.MkdirAll(appPath, 0755)
+	os.MkdirAll(testPath, 0755)
+	os.MkdirAll(resourcesPath, 0755)
+	fmt.Printf("mkdir %s\n", appPath)
+	fmt.Printf("mkdir %s\n", testPath)
+	fmt.Printf("mkdir %s\n", resourcesPath)
 
-	generateAppcode(string(driver), string(conn), string(tables), apppath, string(group))
+	writePomXmlFiles(projectPath, string(group), string(genFileName))
 
+	generateAppcode(string(driver), string(conn), string(tables), appPath, string(group))
+
+	writeResourcesFiles(resourcesPath, string(genFileName), "application.yml", resApplicationYmlTPL)
+	writeResourcesFiles(resourcesPath, string(genFileName), "bootstrap.yml", resBootstrapYmlTPL)
+	writeResourcesFiles(resourcesPath, string(genFileName), "log4j2.xml", resLog4j2XmlTPL)
+
+	writeTestsFiles(testPath, string(group))
 	fmt.Println("end ...")
 }
