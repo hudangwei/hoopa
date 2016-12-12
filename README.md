@@ -1,6 +1,6 @@
 # springboot+jpa代码自动生成工具,集成swagger2
 
-
+现已支持生成springboot完整项目文件,记得修改下application.yml中的数据库数据源配置,改成自己的数据库即可~~~
 ## 命令示例:
 ```
 ./hoopa.exe -gen test -tables="user" -conn=root:123456@tcp\(127.0.0.1:3306\)/test_db -driver=mysql -group=com.example.user
